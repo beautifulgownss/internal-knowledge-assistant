@@ -7,6 +7,7 @@ from app.policy.engine import decide
 from app.policy.signals import RetrievalHit, RetrievalSignals
 from app.schemas.ask import AskRequest, AskResponse
 from app.schemas.ingest import IngestRequest, IngestResponse
+from app.ingest.runner import ingest_pdf_folder
 from app.schemas.common import PolicyAction
 
 APP_VERSION = "0.1.0"
@@ -108,11 +109,17 @@ def ask(req: AskRequest):
 def ingest(req: IngestRequest):
     trace_id = new_trace_id()
 
-    # Contract-only mode for now.
+    result = ingest_pdf_folder(
+        collection_id=req.collection_id,
+        folder_path=req.source.path,
+        trace_id=trace_id,
+        rebuild=req.rebuild_index,
+    )
+
     return IngestResponse(
         trace_id=trace_id,
         collection_id=req.collection_id,
-        ingested_docs=0,
-        chunks_created=0,
-        failed_docs=[],
+        ingested_docs=result.ingested_docs,
+        chunks_created=result.chunks_created,
+        failed_docs=[{"doc_id": f.doc_id, "reason": f.reason} for f in result.failed],
     )
