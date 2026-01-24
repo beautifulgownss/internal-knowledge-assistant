@@ -48,9 +48,9 @@ def decide(signals: RetrievalSignals) -> PolicyDecision:
     top1 = _calc_top1_score(signals)
     gap = _calc_topk_gap(signals)
 
-    STRONG_TOP1 = 0.78
-    MODERATE_TOP1 = 0.60
-    WEAK_TOP1 = 0.45
+    STRONG_TOP1 = 0.55
+    MODERATE_TOP1 = 0.35
+    WEAK_TOP1 = 0.20
     AMBIGUOUS_GAP = 0.06
 
     if not signals.hits or top1 < WEAK_TOP1:
@@ -59,8 +59,7 @@ def decide(signals: RetrievalSignals) -> PolicyDecision:
             action=PolicyAction.refuse,
             warnings=["Insufficient supporting evidence in the selected collection."],
         )
-
-    if gap < AMBIGUOUS_GAP:
+    if len(signals.hits) >= 2 and gap < AMBIGUOUS_GAP:
         return PolicyDecision(
             confidence=ConfidenceLevel.low,
             action=PolicyAction.ask_clarifying,

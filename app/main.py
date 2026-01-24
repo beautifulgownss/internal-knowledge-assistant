@@ -9,6 +9,8 @@ from app.schemas.ask import AskRequest, AskResponse
 from app.schemas.ingest import IngestRequest, IngestResponse
 from app.ingest.runner import ingest_pdf_folder
 from app.schemas.common import PolicyAction
+from app.storage.queries import fetch_candidate_chunks, get_collection_stats
+from app.retrieval.baseline import rank_chunks
 
 APP_VERSION = "0.1.0"
 
@@ -70,17 +72,33 @@ def _simulate_retrieval(question: str):
 def ask(req: AskRequest):
     trace_id = new_trace_id()
 
-    hits = _simulate_retrieval(req.question)
+    # v1 real retrieval baseline: pull stored chunks from SQLite and rank lexically.
+    candidates = fetch_candidate_chunks(collection_id=req.collection_id, limit=50)
+    ranked = rank_chunks(req.question, candidates, top_k=req.top_k)
+
+    # Convert scored chunks into policy retrieval signals
+    hits = [
+        RetrievalHit(
+            doc_id=sc.doc_id,
+            chunk_id=sc.chunk_id,
+            page_start=sc.page_start,
+            page_end=sc.page_end,
+            snippet=sc.snippet,
+            score=sc.score,
+        )
+        for sc in ranked
+    ]
+
     signals = RetrievalSignals(question=req.question, hits=hits)
     decision = decide(signals)
 
-    # For now, the "answer" is a placeholder. We are validating policy behavior.
+    # Generation is still stubbed. We return policy-based responses with real citations.
     if decision.action == PolicyAction.ask_clarifying:
         answer_text = decision.clarifying_question or "Can you clarify your question?"
     elif decision.action == PolicyAction.refuse:
-        answer_text = "I can't answer confidently from the current documents. Please provide more detail or different documents."
+        answer_text = "I can't answer confidently from the current documents in this collection."
     else:
-        answer_text = "Contract-only response. Retrieval is simulated and generation is not enabled yet."
+        answer_text = "Contract-only response. Retrieval is real, generation is not enabled yet."
 
     return AskResponse(
         trace_id=trace_id,
@@ -123,3 +141,8 @@ def ingest(req: IngestRequest):
         chunks_created=result.chunks_created,
         failed_docs=[{"doc_id": f.doc_id, "reason": f.reason} for f in result.failed],
     )
+
+
+@app.get("/v1/collections/{collection_id}/stats")
+def collection_stats(collection_id: str):
+    return get_collection_stats(collection_id)
