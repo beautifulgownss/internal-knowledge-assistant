@@ -11,6 +11,7 @@ from app.ingest.runner import ingest_pdf_folder
 from app.schemas.common import PolicyAction
 from app.storage.queries import fetch_candidate_chunks, get_collection_stats
 from app.retrieval.baseline import rank_chunks
+from app.generation import generate_answer
 
 APP_VERSION = "0.1.0"
 
@@ -92,13 +93,14 @@ def ask(req: AskRequest):
     signals = RetrievalSignals(question=req.question, hits=hits)
     decision = decide(signals)
 
-    # Generation is still stubbed. We return policy-based responses with real citations.
+    # Generation is mocked. Replaced with a real API call in a later phase.
     if decision.action == PolicyAction.ask_clarifying:
         answer_text = decision.clarifying_question or "Can you clarify your question?"
     elif decision.action == PolicyAction.refuse:
         answer_text = "I can't answer confidently from the current documents in this collection."
     else:
-        answer_text = "Contract-only response. Retrieval is real, generation is not enabled yet."
+        context_hits = hits[: req.max_context_chunks]
+        answer_text = generate_answer(req.question, context_hits, decision.action)
 
     return AskResponse(
         trace_id=trace_id,
